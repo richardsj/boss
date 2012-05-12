@@ -27,26 +27,28 @@ def runFiles(directory):
         return False
 
     # Walk the directory structure
-    logger.info(os.path.basename(directory))
+    logger.info("{0}:".format(os.path.basename(directory)))
     for dirname, dirs, files in os.walk(directory):
         # Iterate over the files
+        files.sort()
         for file in files:
             # Build a relative path to the script
             filepath = os.path.join(directory, file)
             # Ensure the script is executable
             if os.access(filepath, os.X_OK):
-                logger.info("\t{0}".format(file))
+                logger.info("| {0}:".format(file))
                 # Launch the script, via a shell, and redirect STDERR to STDOUT
                 script = subprocess.Popen([r'"{0}"'.format(filepath)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
                 output, errors = script.communicate()
 
                 # Show the output of the script
                 for line in cStringIO.StringIO(output):
-                    logger.info("\t\t>> {0}".format(line.strip()))
+                    logger.info("| | {0}".format(line.strip()))
                 logger.info("")
             else:
                 # Warn about a non-executable script
-                logger.warn("""The script {0} is not executable.  Skipping.""".format(filepath))
+                logger.warn("""| {0}: not executable.  Skipping.""".format(file))
+                logger.warn("")
 
     return True
 
