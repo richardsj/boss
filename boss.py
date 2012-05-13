@@ -53,7 +53,7 @@ class BOSSclient():
             raise Exception("There was a problem connecting to {0}@{1}: {2}".format(username, hostname, e))
 
         # Generate a random string to avoid problems/conflicts
-        rndstring = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(16))
+        rndstring = "".join(random.choice(string.ascii_uppercase + string.digits) for x in range(16))
 
         self.remote_basedir = os.path.join(self.tmpdir, "BOSS-{0}".format(rndstring))
         self.client.exec_command("mkdir -p {0}".format(self.remote_basedir))
@@ -61,27 +61,48 @@ class BOSSclient():
         # Output hostname
         bosslog.info(hostname)
 
-    def deploy(self):
-        """Copies a local directory to a remote host and executes the scripts."""
+    def buildVarlist(self):
+        varlist = {}
 
-        if not os.path.exists(self.project):
-            bosslog.warn("""The "{0}" script directory does not exist.""".format(self.project))
+        varlist["ENVIRONMENT"] = self.environment
+        varlist["PROJECT"] = self.project
+        varlist["CONTEXT"] = self.context
+
+        for name, value in self.varmap.iteritems():
+            varlist[name.upper()] = varlist[value.upper()]
+
+        envlist = ""
+        for name, value in varlist.iteritems():
+            envlist = "{0} {1}={2}".format(envlist, name, value)
+
+        return envlist
+
+    def deploy(self, scriptdir=None):
+        """Class method to copy a local directory to a remote host and executes the scripts within."""
+
+        if not scriptdir:
+            scriptdir = self.project
+
+        if not os.path.exists(scriptdir):
+            bosslog.warn("""The "{0}" script directory does not exist.""".format(scriptdir))
             return False
 
         # Build the remote path
-        remotedir = os.path.join(self.remote_basedir, os.path.basename(self.project))
+        remotedir = os.path.join(self.remote_basedir, os.path.basename(scriptdir))
 
         # Create an SFTP channel for transferring files
         sftp = self.client.open_sftp()
         sftp.mkdir(remotedir, 493)
 
+        envlist = self.buildVarlist()
+
         # Output the directory name
         bosslog.info("| {0}".format(os.path.basename(remotedir)))
-        for dirname, dirs, files in os.walk(self.project):
+        for dirname, dirs, files in os.walk(scriptdir):
             files.sort()
             for file in files:
                 # Build paths to the local and remote files
-                local_file = os.path.join(self.project, file)
+                local_file = os.path.join(scriptdir, file)
                 remote_file = os.path.join(remotedir, file)
 
                 # Check for execute permissions
@@ -100,7 +121,7 @@ class BOSSclient():
 
                 # Execute the remote script
                 bosslog.info("| | {0}".format(os.path.basename(remote_file)))
-                stdin, stdout, stderr = self.client.exec_command(remote_file)
+                stdin, stdout, stderr = self.client.exec_command("{0} {1}".format(envlist, remote_file))
                 for line in stdout:
                     bosslog.info("| | | {0}".format(line.rstrip()))
                 for line in stderr:
@@ -111,6 +132,7 @@ class BOSSclient():
         sftp.close()
 
     def configure(self, config_dest=None):
+        """Class method to copy over the configuration templates and values and peform detokenisation."""
 
         if config_dest is None:
             config_dest = self.config_dest
@@ -134,11 +156,6 @@ class BOSSclient():
         sftp.chmod(os.path.join(configroot, "detoken.py"), 0755)
 
         sftp.mkdir(config_dest)
-        bosslog.debug("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
-                                    os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
-                                    os.path.join(configroot, "templates"),
-                                    config_dest
-                                ))
         stdin, stdout, stderr = self.client.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
                                     os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
                                     os.path.join(configroot, "templates"),
@@ -173,7 +190,10 @@ def deploy(project, environment, context):
     bossconf.read(configfile)
 
     # Fetch the default user, if set
-    default_user = bossconf.get("BOSS", "default user")
+    try:
+        default_user = bossconf.get("BOSS", "default user")
+    except:
+        default_user = os.getlogin()
 
     # Read and parse the main environment config file
     hostlistfile = os.path.join(configdir, "{0}-servers.conf".format(environment))
@@ -198,11 +218,7 @@ def deploy(project, environment, context):
             # '@' symbol missing.  Assume just a hostname.
             host = item[0].strip()
             # Set the user to the default user, if available
-            if default_user:
-                user = default_user
-            else:
-                # Otherwise use the current user.
-                user = os.getlogin()
+            user = default_user
 
         # Transfer and run the files in the common-scripts directory
         try:
@@ -215,9 +231,15 @@ def deploy(project, environment, context):
             remotehost.project = project
             remotehost.context = context
 
-            remotehost.configure()
-            #remotehost.deploy(common_scriptdir)
-            #remotehost.deploy()
+            # Perform the environment variable mappings, if any
+            remotehost.varmap = {}
+            vars = bossconf.items("VAR_MAPPING")
+            for var, value in vars:
+                remotehost.varmap[var] = value
+
+            remotehost.configure("/tmp/scott")
+            remotehost.deploy(common_scriptdir)
+            remotehost.deploy()
 
             del remotehost
 

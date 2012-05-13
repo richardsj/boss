@@ -7,7 +7,7 @@ A simple tokenised template parser written to be compatible with Ant's copy & fi
 __author__ = "Scott Wallace"
 __version__ = "0.1"
 __maintainer__ = "Scott Wallace"
-__email__ = "scott@suborbit.com"
+__email__ = "scott@wallace.sh"
 __status__ = "Production"
 
 import os
