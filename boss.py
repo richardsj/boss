@@ -80,9 +80,11 @@ class BOSSclient():
     def deploy(self, scriptdir=None):
         """Class method to copy a local directory to a remote host and executes the scripts within."""
 
+        # Default to the supplied project for the script directory
         if not scriptdir:
             scriptdir = self.project
 
+        # Warn if there's no scripts to run
         if not os.path.exists(scriptdir):
             bosslog.warn("""The "{0}" script directory does not exist.""".format(scriptdir))
             return False
@@ -94,6 +96,7 @@ class BOSSclient():
         sftp = self.client.open_sftp()
         sftp.mkdir(remotedir, 493)
 
+        # Build a list of the environment variables to pass through
         envlist = self.buildVarlist()
 
         # Output the directory name
@@ -134,27 +137,32 @@ class BOSSclient():
     def configure(self, config_dest=None):
         """Class method to copy over the configuration templates and values and peform detokenisation."""
 
+        # Use the default config destination if none is provided
         if config_dest is None:
             config_dest = self.config_dest
 
+        # Create a directory to perform the configuration detokenisation
         sftp = self.client.open_sftp()
-
         configroot = os.path.join(self.remote_basedir, ".configure")
         sftp.mkdir(configroot)
 
+        # Copy over the templates structure, verbatim
         for dirname, dirs, files in os.walk("templates"):
             sftp.mkdir(os.path.join(configroot, dirname))
             for file in files:
                 sftp.put(os.path.join(dirname, file), os.path.join(configroot, dirname, file))
 
+        # Copy over the config value files, verbatim
         for dirname, dirs, files in os.walk("conf"):
             sftp.mkdir(os.path.join(configroot, dirname))
             for file in files:
                 sftp.put(os.path.join(dirname, file), os.path.join(configroot, dirname, file))
 
+        # Copy over the lib/detoken.py script and set the permissions
         sftp.put(os.path.join(boss_basedir, "lib", "detoken.py"), os.path.join(configroot, "detoken.py"))
         sftp.chmod(os.path.join(configroot, "detoken.py"), 0755)
 
+        # Run the detokeniser
         sftp.mkdir(config_dest)
         stdin, stdout, stderr = self.client.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
                                     os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
@@ -237,7 +245,7 @@ def deploy(project, environment, context):
             for var, value in vars:
                 remotehost.varmap[var] = value
 
-            remotehost.configure("/tmp/scott")
+            remotehost.configure()
             remotehost.deploy(common_scriptdir)
             remotehost.deploy()
 
