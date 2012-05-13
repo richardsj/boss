@@ -62,15 +62,19 @@ class BOSSclient():
         bosslog.info(hostname)
 
     def buildVarlist(self):
+        """Class method to put a simple string that sets all the environment varibles needed for the remote scripts."""
         varlist = {}
 
+        # Set the main BOSS variables
         varlist["ENVIRONMENT"] = self.environment
         varlist["PROJECT"] = self.project
         varlist["CONTEXT"] = self.context
 
+        # Set any additional variable mappings
         for name, value in self.varmap.iteritems():
             varlist[name.upper()] = varlist[value.upper()]
 
+        # Build a single string
         envlist = ""
         for name, value in varlist.iteritems():
             envlist = "{0} {1}={2}".format(envlist, name, value)
