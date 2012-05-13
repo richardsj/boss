@@ -1,0 +1,23 @@
+This directory contains the top-level directories for the scripts for each project.
+
+Scripts that are non-executable will be ignored.  This allows scripts to be "disabled" easily.
+
+STRUCTURE
+---------
+projects/
+|-- project1/
+|   |-- script1
+|   `-- script2
+|-- project2/
+|   |-- script1
+|   |-- script2
+|-- project3/
+    .
+    .
+    .
+`-- project-n/
+    |-- script1
+        .
+        .
+        .
+    `-- script-n
