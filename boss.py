@@ -81,6 +81,35 @@ class BOSSclient():
 
         return envlist
 
+    def mkdirs(self, directory):
+        """Class method to recursively make directories on a remote client."""
+
+        self.client.exec_command("mkdir -p {0}".format(directory))
+
+    def rmdirs(self, directory):
+        """Class method to recursively delete directories on a remote client."""
+
+        self.client.exec_command("rm -rf {0}".format(directory))
+
+    def pushDirectory(self, src_dir, dst_dir):
+        self.mkdirs(dst_dir)
+
+        sftp = self.client.open_sftp()
+
+        # Recurse the local directory and copy its content to the remote host
+        for dirname, dirs, files in os.walk(src_dir):
+            print os.path.join(dst_dir, dirname)
+            sftp.mkdir(os.path.join(dst_dir, dirname))
+            for file in files:
+                local_file = os.path.join(dirname, file)
+                remote_file = os.path.join(dst_dir, dirname, file)
+
+                # Copy and duplicate permissions
+                sftp.put(local_file, remote_file)
+                sftp.chmod(remote_file, os.stat(local_file).st_mode)
+
+        sftp.close()
+
     def deploy(self, scriptdir=None):
         """Class method to copy a local directory to a remote host and executes the scripts within."""
 
@@ -98,7 +127,7 @@ class BOSSclient():
 
         # Create an SFTP channel for transferring files
         sftp = self.client.open_sftp()
-        sftp.mkdir(remotedir, 493)
+        sftp.mkdir(remotedir, 0755)
 
         # Build a list of the environment variables to pass through
         envlist = self.buildVarlist()
@@ -134,8 +163,7 @@ class BOSSclient():
                 for line in stderr:
                     bosslog.warn("| | | {0}".format(line.rstrip()))
 
-                sftp.remove(remote_file)
-        sftp.rmdir(remotedir)
+        self.rmdirs(remotedir)
         sftp.close()
 
     def configure(self, config_dest=None):
@@ -146,28 +174,18 @@ class BOSSclient():
             config_dest = self.config_dest
 
         # Create a directory to perform the configuration detokenisation
-        sftp = self.client.open_sftp()
         configroot = os.path.join(self.remote_basedir, ".configure")
-        sftp.mkdir(configroot)
 
-        # Copy over the templates structure, verbatim
-        for dirname, dirs, files in os.walk("templates"):
-            sftp.mkdir(os.path.join(configroot, dirname))
-            for file in files:
-                sftp.put(os.path.join(dirname, file), os.path.join(configroot, dirname, file))
-
-        # Copy over the config value files, verbatim
-        for dirname, dirs, files in os.walk("conf"):
-            sftp.mkdir(os.path.join(configroot, dirname))
-            for file in files:
-                sftp.put(os.path.join(dirname, file), os.path.join(configroot, dirname, file))
+        self.pushDirectory("templates", configroot)
+        self.pushDirectory("conf", configroot)
 
         # Copy over the lib/detoken.py script and set the permissions
+        sftp = self.client.open_sftp()
         sftp.put(os.path.join(boss_basedir, "lib", "detoken.py"), os.path.join(configroot, "detoken.py"))
         sftp.chmod(os.path.join(configroot, "detoken.py"), 0755)
 
         # Run the detokeniser
-        sftp.mkdir(config_dest)
+        self.mkdirs(config_dest)
         stdin, stdout, stderr = self.client.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
                                     os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
                                     os.path.join(configroot, "templates"),
@@ -178,12 +196,12 @@ class BOSSclient():
         for line in stderr:
             bosslog.warn(line.rstrip())
 
-        sftp.rmdir(configroot)
+        self.rmdirs(configroot)
         sftp.close()
 
     def __del__(self):
         sftp = self.client.open_sftp()
-        sftp.rmdir(self.remote_basedir)
+        self.rmdirs(self.remote_basedir)
         sftp.close()
 
         self.client.close()
