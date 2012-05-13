@@ -2,9 +2,11 @@
 
 import sys
 import os
-import subprocess
 import logging
-import cStringIO
+import optparse
+import ConfigParser
+import random
+import string
 
 # Try to import "paramiko" for SSH functionality
 try:
@@ -44,13 +46,21 @@ class BOSSclient():
         except Exception, e:
             raise Exception("There was a problem connecting to {0}@{1}: {2}".format(username, hostname, e))
 
-        self.remotebasedir = "/var/tmp"
+        # Generate a random string to avoid problems/conflicts
+        rndstring = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(16))
+
+        self.remotebasedir = "/var/tmp/BOSS-{0}".format(rndstring)
+        self.client.exec_command("mkdir -p {0}".format(self.remotebasedir))
 
         # Output hostname
         bosslog.info(hostname)
 
     def execute(self, directory):
         """Copies a local directory to a remote host and executes the script."""
+
+        if not os.path.exists(directory):
+            bosslog.warn("""The "{0}" script directory does not exist.""".format(directory))
+            return False
 
         # Build the remote path
         remotedir = os.path.join(self.remotebasedir, os.path.basename(directory))
@@ -92,21 +102,59 @@ class BOSSclient():
 
                 sftp.remove(remote_file)
         sftp.rmdir(remotedir)
+        sftp.rmdir(self.remotebasedir)
 
-def deploy():
+def deploy(project, environment, context):
     # Resolve the path of where BOSS is installed
     basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
+
+    configdir = os.path.join(basedir, "conf")
+
+    # Read and parse the main BOSS config file
+    configfile = os.path.join(configdir, "boss.conf")
+    bossconf = ConfigParser.ConfigParser()
+    bossconf.read(configfile)
+
+    # Fetch the default user, if set
+    default_user = bossconf.get("BOSS", "default user")
+
+    # Read and parse the main environment config file
+    hostlistfile = os.path.join(configdir, "{0}-servers.conf".format(environment))
+    hostlist = ConfigParser.ConfigParser()
+    hostlist.read(hostlistfile)
+
+    # Get a list of the hosts to deploy to
+    hosts = hostlist.get(project, context)
 
     # Resolve the common-scripts directory
     common_scriptdir = os.path.join(basedir, "common-scripts")
 
-    # Run the files in the common-scripts directory
-    try:
-        saturn = BOSSclient("saturn", "root")
-    except Exception, e:
-        bosslog.error(e)
-    else:
-        saturn.execute(common_scriptdir)
+    # Loop through each of the configured hosts
+    for entry in hosts.split(","):
+        # Try to work out the username and host for each entry
+        item = entry.split("@")
+        try:
+            # Simply split on the '@' symbol
+            host = item[1].strip()
+            user = item[0].strip()
+        except IndexError:
+            # '@' symbol missing.  Assume just a hostname.
+            host = item[0].strip()
+            # Set the user to the default user, if available
+            if default_user:
+                user = default_user
+            else:
+                # Otherwise use the current user.
+                user = os.getlogin()
+
+        # Transfer and run the files in the common-scripts directory
+        try:
+            remotehost = BOSSclient(host, user)
+        except Exception, e:
+            bosslog.error(e)
+        else:
+            remotehost.execute(common_scriptdir)
+            remotehost.execute(project)
 
 if __name__ == "__main__":
     # Send INFO logging to stdout
@@ -128,5 +176,17 @@ if __name__ == "__main__":
     bosslog = logging.getLogger("boss.logger")
     bosslog.setLevel(logging.DEBUG)
 
+    # Get the command line options
+    parser = optparse.OptionParser()
+    parser.add_option("-p", "--project", dest="project", help="The project scripts to execute.")
+    parser.add_option("-e", "--env", dest="environment", help="The environment to delploy to.")
+    parser.add_option("-c", "--context", dest="context", help="The context of the project.")
+    (options, args) = parser.parse_args()
+
+    # Ensure all three options are provided
+    if (not options.project or not options.environment or not options.context):
+        bosslog.error(parser.print_help())
+        sys.exit(1)
+
     # GO!
-    deploy()
+    deploy(options.project, options.environment, options.context)
