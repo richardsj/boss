@@ -7,7 +7,7 @@ import optparse
 import ConfigParser
 import random
 import string
-import types
+import traceback
 
 # Try to import "paramiko" for SSH functionality
 try:
@@ -40,7 +40,7 @@ class BOSSclient():
 
     config_dest = "/srv/cfg"
     tmpdir = "/var/tmp"
-    pkgroot = "/srv/pkg"
+    pkgroot = "/srv"
 
     def __init__(self, hostname, username):
         # Set up an SSH client and set the key policy to ignore missing keys
@@ -104,10 +104,10 @@ class BOSSclient():
 
         # Recurse the local directory and copy its content to the remote host
         for dirname, dirs, files in os.walk(src_dir):
-            sftp.mkdir(os.path.join(dst_dir, dirname))
+            sftp.mkdir(os.path.join(dst_dir, os.path.basename(dirname)))
             for file in files:
                 local_file = os.path.join(dirname, file)
-                remote_file = os.path.join(dst_dir, dirname, file)
+                remote_file = os.path.join(dst_dir, os.path.basename(dirname), file)
 
                 # Copy and duplicate permissions
                 sftp.put(local_file, remote_file)
@@ -120,7 +120,7 @@ class BOSSclient():
 
         # Default to the supplied project for the script directory
         if not scriptdir:
-            scriptdir = self.project
+            scriptdir = os.path.join(boss_basedir, "projects", self.project, "scripts")
 
         # Warn if there's no scripts to run
         if not os.path.exists(scriptdir):
@@ -153,7 +153,6 @@ class BOSSclient():
                 else:
                     # Warn about a non-executable script
                     bosslog.warn("""| {0}: not executable.  Skipping.""".format(file))
-                    bosslog.warn("")
                     continue
 
                 # Get the file permissions from the local file and apply them remotely
@@ -181,13 +180,13 @@ class BOSSclient():
         # Create a directory to perform the configuration detokenisation
         configroot = os.path.join(self.remote_basedir, ".configure")
 
-        self.pushDirectory("templates", configroot)
-        self.pushDirectory("conf", configroot)
-        self.pushDirectory("pkg", self.pkgroot)
+        self.pushDirectory(os.path.join("projects", self.project, "templates"), configroot)
+        self.pushDirectory(os.path.join("projects", self.project, "conf"), configroot)
+        self.pushDirectory(os.path.join("projects", self.project, "pkg"), self.pkgroot)
 
         # Copy over the lib/detoken.py script and set the permissions
         sftp = self.client.open_sftp()
-        sftp.put(os.path.join(boss_basedir, "lib", "detoken.py"), os.path.join(configroot, "detoken.py"))
+        sftp.put(os.path.join(boss_basedir, "bin", "detoken.py"), os.path.join(configroot, "detoken.py"))
         sftp.chmod(os.path.join(configroot, "detoken.py"), 0755)
 
         # Run the detokeniser
@@ -232,7 +231,8 @@ def deploy(project, environment, context):
     """Main deployment loop."""
 
     # Resolve the path of where BOSS is installed
-    boss_basedir = os.path.abspath(os.path.dirname(sys.argv[0]))
+    boss_basedir = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ".."))
+    os.chdir(boss_basedir)
 
     configdir = os.path.join(boss_basedir, "conf")
 
@@ -248,7 +248,7 @@ def deploy(project, environment, context):
         default_user = os.getlogin()
 
     # Read and parse the main environment config file
-    hostlistfile = os.path.join(configdir, "{0}-servers.conf".format(environment))
+    hostlistfile = os.path.join(configdir, "{0}.conf".format(environment))
     hostlist = ConfigParser.ConfigParser()
     hostlist.read(hostlistfile)
 
@@ -256,7 +256,7 @@ def deploy(project, environment, context):
     hosts = hostlist.get(project, context)
 
     # Resolve the common-scripts directory
-    common_scriptdir = os.path.join(boss_basedir, "common-scripts")
+    common_scriptdir = os.path.join(boss_basedir, "common", "scripts")
 
     # Loop through each of the configured hosts
     for entry in hosts.split(","):
@@ -272,7 +272,7 @@ def deploy(project, environment, context):
             # Set the user to the default user, if available
             user = default_user
 
-        # Transfer and run the files in the common-scripts directory
+        # Transfer and run the scripts
         try:
             remotehost = BOSSclient(host, user)
         except Exception, e:
@@ -285,9 +285,11 @@ def deploy(project, environment, context):
 
             # Perform the environment variable mappings, if any
             remotehost.varmap = {}
-            vars = bossconf.items("VAR_MAPPING")
-            for var, value in vars:
-                remotehost.varmap[var] = value
+            try:
+                for var, value in bossconf.items("VAR_MAPPING"):
+                    remotehost.varmap[var] = value
+            except ConfigParser.NoSectionError:
+                pass
 
             # Send the main configuration templates, config values and pkg/ data
             try:
