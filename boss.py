@@ -7,6 +7,7 @@ import optparse
 import ConfigParser
 import random
 import string
+import types
 
 # Try to import "paramiko" for SSH functionality
 try:
@@ -202,11 +203,14 @@ class BOSSclient():
         sftp.close()
 
     def __del__(self):
-        sftp = self.client.open_sftp()
-        self.rmdirs(self.remote_basedir)
-        sftp.close()
+        try:
+            sftp = self.client.open_sftp()
+            self.rmdirs(self.remote_basedir)
+            sftp.close()
 
-        self.client.close()
+            self.client.close()
+        except AttributeError:
+            pass
 
 def deploy(project, environment, context):
     """Main deployment loop."""
@@ -256,7 +260,7 @@ def deploy(project, environment, context):
         try:
             remotehost = BOSSclient(host, user)
         except Exception, e:
-            bosslog.error(e)
+            bosslog.error("""There was an error connection to host "{0}": {1}""".format(host, e))
         else:
             # Pass through the environment, project and context to the client object
             remotehost.environment = environment
