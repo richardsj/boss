@@ -46,7 +46,8 @@ class BOSSclient():
         # Set up an SSH client and set the key policy to ignore missing keys
         self.client = paramiko.SSHClient()
         self.client.load_system_host_keys()
-        self.client.set_missing_host_key_policy(IgnoreMissingKeys)
+        missingKeyPolicy = IgnoreMissingKeys()
+        self.client.set_missing_host_key_policy(missingKeyPolicy)
 
         # Connect to the remote host
         try:
@@ -100,7 +101,6 @@ class BOSSclient():
 
         # Recurse the local directory and copy its content to the remote host
         for dirname, dirs, files in os.walk(src_dir):
-            print os.path.join(dst_dir, dirname)
             sftp.mkdir(os.path.join(dst_dir, dirname))
             for file in files:
                 local_file = os.path.join(dirname, file)
