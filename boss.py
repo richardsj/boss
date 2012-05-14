@@ -75,7 +75,10 @@ class BOSSclient():
 
         # Set any additional variable mappings
         for name, value in self.varmap.iteritems():
-            varlist[name.upper()] = varlist[value.upper()]
+            try:
+                varlist[name.upper()] = varlist[value.upper()]
+            except Exception, e:
+                varlist[name.upper()] = ""
 
         # Build a single string
         envlist = ""
