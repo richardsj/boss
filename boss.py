@@ -188,16 +188,28 @@ class BOSSclient():
         sftp.chmod(os.path.join(configroot, "detoken.py"), 0755)
 
         # Run the detokeniser
+        bosslog.info("| Detokenising the configuration templates")
         self.mkdirs(config_dest)
-        stdin, stdout, stderr = self.client.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
-                                    os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
-                                    os.path.join(configroot, "templates"),
-                                    config_dest
-                                ))
-        for line in stdout:
-            bosslog.info(line.rstrip())
-        for line in stderr:
-            bosslog.warn(line.rstrip())
+        channel = self.client.get_transport().open_session()
+        channel.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
+                             os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
+                             os.path.join(configroot, "templates"),
+                             config_dest
+                            ))
+
+        # Wait for the command to finish and get the returncode
+        errorcode = channel.recv_exit_status()
+
+        output = []
+        # Display output
+        while channel.recv_stderr_ready():
+            output.append(channel.recv_stderr(8192))
+        output = "".join(output).split("\n")
+        for line in output:
+            bosslog.error("| | {0}".format(line.rstrip()))
+
+        if errorcode > 0:
+            raise Exception("The detokenisation process failed.")
 
         self.rmdirs(configroot)
         sftp.close()
@@ -273,10 +285,18 @@ def deploy(project, environment, context):
             for var, value in vars:
                 remotehost.varmap[var] = value
 
-            remotehost.configure()
-            remotehost.deploy(common_scriptdir)
-            remotehost.deploy()
+            # Send the main configuration templates, config values and pkg/ data
+            try:
+                remotehost.configure()
+            except Exception, e:
+                raise Exception("There was a problem configuring the remote client, {0}: {1}".format(host, e))
 
+            # Run the common scripts
+            remotehost.deploy(common_scriptdir)
+
+            # Run the project specific scripts
+            remotehost.deploy()
+        finally:
             del remotehost
 
 if __name__ == "__main__":
@@ -312,4 +332,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # GO!
-    deploy(options.project, options.environment, options.context)
+    try:
+        deploy(options.project, options.environment, options.context)
+    except Exception, e:
+        bosslog.error("There was an error: {0}".format(e))

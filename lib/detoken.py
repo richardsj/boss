@@ -82,7 +82,11 @@ for dirpath, dirnames, filenames in os.walk(options.templates):
 
         outfile = os.path.join(options.destination, relativepath, filename) 
         logging.debug("Writing to %s" % outfile)
-        output = open(outfile, "w")
+        try:
+            output = open(outfile, "w")
+        except Exception, e:
+            logging.error("Could not open a file for writing: %s" % e)
+            sys.exit(2)
 
         # Iterate over the input file
         for line in input:
