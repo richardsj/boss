@@ -215,6 +215,7 @@ class BOSSclient():
         sftp.close()
 
     def __del__(self):
+        # Attempt to tidy-up the temporary directory on the remote host
         try:
             sftp = self.client.open_sftp()
             self.rmdirs(self.remote_basedir)
@@ -272,7 +273,7 @@ def deploy(project, environment, context):
         try:
             remotehost = BOSSclient(host, user)
         except Exception, e:
-            bosslog.error("""There was an error connection to host "{0}": {1}""".format(host, e))
+            bosslog.error("""There was an error connecting to host "{0}": {1}""".format(host, e))
         else:
             # Pass through the environment, project and context to the client object
             remotehost.environment = environment
