@@ -39,6 +39,7 @@ class BOSSclient():
 
     config_dest = "/srv/cfg"
     tmpdir = "/var/tmp"
+    pkgroot = "/srv/pkg"
 
     def __init__(self, hostname, username):
         # Set up an SSH client and set the key policy to ignore missing keys
@@ -178,6 +179,7 @@ class BOSSclient():
 
         self.pushDirectory("templates", configroot)
         self.pushDirectory("conf", configroot)
+        self.pushDirectory("pkg", self.pkgroot)
 
         # Copy over the lib/detoken.py script and set the permissions
         sftp = self.client.open_sftp()
