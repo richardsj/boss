@@ -38,9 +38,9 @@ class IgnoreMissingKeys(paramiko.MissingHostKeyPolicy):
 class BOSSclient():
     """Class for a remote BOSS client."""
 
-    config_dest = "/srv/cfg"
-    tmpdir = "/var/tmp"
-    pkgroot = "/srv"
+    tmpdir = "/tmp"
+    cfgroot = "/"
+    pkgroot = "/"
 
     def __init__(self, hostname, username):
         # Set up an SSH client and set the key policy to ignore missing keys
@@ -59,7 +59,7 @@ class BOSSclient():
         rndstring = "".join(random.choice(string.ascii_uppercase + string.digits) for x in range(16))
 
         self.remote_basedir = os.path.join(self.tmpdir, "BOSS-{0}".format(rndstring))
-        self.client.exec_command("mkdir -p {0}".format(self.remote_basedir))
+        self.mkdirs(self.remote_basedir)
 
         # Output hostname
         bosslog.info(hostname)
@@ -102,12 +102,16 @@ class BOSSclient():
 
         sftp = self.client.open_sftp()
 
+        # Count how many directories deep so we can avoid sending too deep
+        pathskip = len(src_dir.split(os.sep))
+
         # Recurse the local directory and copy its content to the remote host
         for dirname, dirs, files in os.walk(src_dir):
-            sftp.mkdir(os.path.join(dst_dir, os.path.basename(dirname)))
+            shortdir = os.sep.join(dirname.split(os.sep)[pathskip:])
+            self.mkdirs(os.path.join(dst_dir, shortdir))
             for file in files:
                 local_file = os.path.join(dirname, file)
-                remote_file = os.path.join(dst_dir, os.path.basename(dirname), file)
+                remote_file = os.path.join(dst_dir, shortdir, file)
 
                 # Copy and duplicate permissions
                 sftp.put(local_file, remote_file)
@@ -129,13 +133,13 @@ class BOSSclient():
 
         # Build the remote path
         remotedir = os.path.join(self.remote_basedir, os.path.basename(scriptdir))
-
-        # Create an SFTP channel for transferring files
-        sftp = self.client.open_sftp()
-        sftp.mkdir(remotedir, 0755)
+        self.mkdirs(remotedir)
 
         # Build a list of the environment variables to pass through
         envlist = self.buildVarlist()
+
+        # Create an SFTP channel for transferring files
+        sftp = self.client.open_sftp()
 
         # Output the directory name
         bosslog.info("| {0}".format(os.path.basename(remotedir)))
@@ -175,14 +179,14 @@ class BOSSclient():
 
         # Use the default config destination if none is provided
         if config_dest is None:
-            config_dest = self.config_dest
+            config_dest = self.cfgroot
 
         # Create a directory to perform the configuration detokenisation
         configroot = os.path.join(self.remote_basedir, ".configure")
 
-        self.pushDirectory(os.path.join("projects", self.project, "templates"), configroot)
-        self.pushDirectory(os.path.join("projects", self.project, "conf"), configroot)
-        self.pushDirectory(os.path.join("projects", self.project, "pkg"), self.pkgroot)
+        self.pushDirectory(os.path.join("projects", self.project, "templates"), os.path.join(configroot, "templates"))
+        self.pushDirectory(os.path.join("projects", self.project, "conf"), os.path.join(configroot, "conf"))
+        self.pushDirectory(os.path.join("projects", self.project, "pkg"), os.path.join(self.pkgroot))
 
         # Copy over the lib/detoken.py script and set the permissions
         sftp = self.client.open_sftp()
@@ -213,16 +217,12 @@ class BOSSclient():
         if errorcode > 0:
             raise Exception("The detokenisation process failed.")
 
-        self.rmdirs(configroot)
         sftp.close()
 
     def __del__(self):
         # Attempt to tidy-up the temporary directory on the remote host
         try:
-            sftp = self.client.open_sftp()
             self.rmdirs(self.remote_basedir)
-            sftp.close()
-
             self.client.close()
         except AttributeError:
             pass
