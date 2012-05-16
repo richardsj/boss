@@ -80,7 +80,9 @@ class client():
     def mkdirs(self, directory):
         """Class method to recursively make directories on a remote client."""
 
-        self.client.exec_command("mkdir -p {0}".format(directory))
+        (stdin, stdout, stderr) = self.client.exec_command("mkdir -p {0}".format(directory))
+        # Read the stderr to ensure we let the mkdir command complete.  [ISSUE-5]
+        stderr.read()
 
     def rmdirs(self, directory):
         """Class method to recursively delete directories on a remote client."""
@@ -89,6 +91,7 @@ class client():
 
     def pushDirectory(self, src_dir, dst_dir):
         """Class method to copy the contents of a directory to a remote host."""
+
         self.mkdirs(dst_dir)
 
         sftp = self.client.open_sftp()
@@ -105,7 +108,11 @@ class client():
                 remote_file = os.path.join(dst_dir, shortdir, file)
 
                 # Copy and duplicate permissions
-                sftp.put(local_file, remote_file)
+                try:
+                    sftp.put(local_file, remote_file)
+                except Exception, e:
+                    raise Exception("File copy failed: {0}".format(e))
+
                 sftp.chmod(remote_file, os.stat(local_file).st_mode)
 
         sftp.close()
@@ -198,15 +205,22 @@ class client():
         errorcode = channel.recv_exit_status()
 
         output = []
-        # Display output
-        while channel.recv_stderr_ready():
-            output.append(channel.recv_stderr(8192))
-        output = "".join(output).split("\n")
-        for line in output:
-            bosslog.error("| | {0}".format(line.rstrip()))
-
         if errorcode > 0:
+            # Display stderr
+            while channel.recv_stderr_ready():
+                output.append(channel.recv_stderr(8192))
+            output = "".join(output).split("\n")
+            for line in output:
+                bosslog.error("| | {0}".format(line.rstrip()))
+
             raise Exception("The detokenisation process failed.")
+        else:
+            # Display stdout
+            while channel.recv_ready():
+                output.append(channel.recv(8192))
+            output = "".join(output).split("\n")
+            for line in output:
+                bosslog.info("| | {0}".format(line.rstrip()))
 
         sftp.close()
 
