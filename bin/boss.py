@@ -46,12 +46,12 @@ def deploy(project, environment, context):
         default_user = os.getlogin()
 
     # Read and parse the main environment config file
-    hostlistfile = os.path.join(configdir, "{0}.conf".format(environment))
-    hostlist = ConfigParser.ConfigParser()
-    hostlist.read(hostlistfile)
+    env_file = os.path.join(configdir, "{0}.conf".format(environment))
+    envconf = ConfigParser.ConfigParser()
+    envconf.read(env_file)
 
     # Get a list of the hosts to deploy to
-    hosts = hostlist.get(project, context)
+    hosts = envconf.get(project, context)
 
     # Resolve the common-scripts directory
     common_scriptdir = os.path.join(boss_basedir, "common", "scripts")

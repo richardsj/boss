@@ -27,8 +27,7 @@ class client():
     """Class for a remote BOSS client."""
 
     tmpdir = "/tmp"
-    cfgroot = "/"
-    pkgroot = "/"
+    deployroot = "/"
 
     def __init__(self, hostname, username):
         # Detect the main BOSS base directory
@@ -166,19 +165,19 @@ class client():
         self.rmdirs(remotedir)
         sftp.close()
 
-    def configure(self, config_dest=None):
+    def configure(self, root=None):
         """Class method to copy over the configuration templates and values and peform detokenisation."""
 
         # Use the default config destination if none is provided
-        if config_dest is None:
-            config_dest = self.cfgroot
+        if root is None:
+            root = self.deployroot
 
         # Create a directory to perform the configuration detokenisation
         configroot = os.path.join(self.remote_basedir, ".configure")
 
         self.pushDirectory(os.path.join(self.boss_basedir, "projects", self.project, "templates"), os.path.join(configroot, "templates"))
         self.pushDirectory(os.path.join(self.boss_basedir, "projects", self.project, "conf"), os.path.join(configroot, "conf"))
-        self.pushDirectory(os.path.join(self.boss_basedir, "projects", self.project, "pkg"), os.path.join(self.pkgroot))
+        self.pushDirectory(os.path.join(self.boss_basedir, "projects", self.project, "pkg"), os.path.join(root))
 
         # Copy over the lib/detoken.py script and set the permissions
         sftp = self.client.open_sftp()
@@ -187,12 +186,12 @@ class client():
 
         # Run the detokeniser
         bosslog.info("| Detokenising the configuration templates")
-        self.mkdirs(config_dest)
+        self.mkdirs(root)
         channel = self.client.get_transport().open_session()
         channel.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
                              os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
                              os.path.join(configroot, "templates"),
-                             config_dest
+                             root
                             ))
 
         # Wait for the command to finish and get the returncode
