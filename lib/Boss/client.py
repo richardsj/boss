@@ -11,11 +11,16 @@ except Exception, e:
     bosslog.error("""BOSS requires "paramiko".  Please install paramiko before attempting to continue.  See, http://www.lag.net/paramiko/""")
     sys.exit(99)
 
+# Use the main BOSS logger
 bosslog = logging.getLogger("boss.logger")
 
 class IgnoreMissingKeys(paramiko.MissingHostKeyPolicy):
     """Class to set up a policy to ignote missing SSH host keys."""
+
     def missing_host_key(self, client, hostname, key):
+        """Class method to handle missing host keys."""
+
+        # Do nothing.
         return
 
 class client():
