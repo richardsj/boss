@@ -3,16 +3,10 @@ import sys
 import random
 import string
 import logging
+import paramiko
 
 # Use the main BOSS logger
 bosslog = logging.getLogger("boss.logger")
-
-# Try to import "paramiko" for SSH functionality
-try:
-    import paramiko
-except Exception, e:
-    bosslog.error("""BOSS requires "paramiko".  Please install paramiko before attempting to continue.  See, http://www.lag.net/paramiko/""")
-    sys.exit(99)
 
 class IgnoreMissingKeys(paramiko.MissingHostKeyPolicy):
     """Class to set up a policy to ignote missing SSH host keys."""

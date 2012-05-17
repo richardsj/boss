@@ -27,6 +27,7 @@ def deploy(project, environment, context):
 
     # Add the local lib/ directory to the Python path
     sys.path.append(os.path.join(boss_basedir, "lib"))
+    sys.path.append(os.path.join(boss_basedir, "lib", "paramiko"))
 
     # Add the main boss class
     import Boss
