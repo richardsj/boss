@@ -190,11 +190,16 @@ class client():
         sftp = self.client.open_sftp()
         sftp.put(os.path.join(self.boss_basedir, "bin", "detoken.py"), os.path.join(configroot, "detoken.py"))
         sftp.chmod(os.path.join(configroot, "detoken.py"), 0755)
+        sftp.close()
 
         # Run the detokeniser
         bosslog.info("| Detokenising the configuration templates")
         self.mkdirs(root)
         channel = self.client.get_transport().open_session()
+
+        # Combine the output for stdout and stderr
+        channel.set_combine_stderr(True)
+
         channel.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
                              os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
                              os.path.join(configroot, "templates"),
@@ -205,24 +210,15 @@ class client():
         errorcode = channel.recv_exit_status()
 
         output = []
+        # Display stderr
+        while channel.recv_stderr_ready():
+            output.append(channel.recv_stderr(8192))
+        output = "".join(output).split("\n")
+        for line in output:
+            bosslog.error("| | {0}".format(line.rstrip()))
+
         if errorcode > 0:
-            # Display stderr
-            while channel.recv_stderr_ready():
-                output.append(channel.recv_stderr(8192))
-            output = "".join(output).split("\n")
-            for line in output:
-                bosslog.error("| | {0}".format(line.rstrip()))
-
             raise Exception("The detokenisation process failed.")
-        else:
-            # Display stdout
-            while channel.recv_ready():
-                output.append(channel.recv(8192))
-            output = "".join(output).split("\n")
-            for line in output:
-                bosslog.info("| | {0}".format(line.rstrip()))
-
-        sftp.close()
 
     def __del__(self):
         # Attempt to tidy-up the temporary directory on the remote host
