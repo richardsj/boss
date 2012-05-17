@@ -64,6 +64,15 @@ def deploy(project, environment, context):
             # Simply split on the '@' symbol
             host = item[1].strip()
             user = item[0].strip()
+
+            # Determine if there is a deployment root set
+            item = host.split(":")
+            try:
+                # Now split on the ':' symbol
+                deploypath = item[1].strip()
+                host = item[0].strip()
+            except IndexError:
+                deploypath = None
         except IndexError:
             # '@' symbol missing.  Assume just a hostname.
             host = item[0].strip()
@@ -91,7 +100,7 @@ def deploy(project, environment, context):
 
             # Send the main configuration templates, config values and pkg/ data
             try:
-                remotehost.configure()
+                remotehost.configure(deploypath)
             except Exception, e:
                 raise Exception("There was a problem configuring the remote client, {0}: {1}".format(host, e))
 
