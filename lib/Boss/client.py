@@ -217,6 +217,8 @@ class client():
         for line in output:
             bosslog.error("| | {0}".format(line.rstrip()))
 
+        channel.close()
+
         if errorcode > 0:
             raise Exception("The detokenisation process failed.")
 
