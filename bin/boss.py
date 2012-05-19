@@ -5,6 +5,7 @@ import sys
 import os
 import logging
 import optparse
+import traceback
 
 __install__ = os.path.realpath(os.path.join(sys.path[0], ".."))
 
@@ -19,41 +20,6 @@ class SingleLevelFilter(logging.Filter):
             return (record.levelno != self.passlevel)
         else:
             return (record.levelno == self.passlevel)
-
-def deploy(project, environment, context):
-    """Main deployment loop."""
-
-    # Add the main boss class
-    import Boss
-
-    server = Boss.server(project, environment, context)
-
-    for hostname in server.hosts:
-        # Transfer and run the scripts
-        try:
-            remotehost = Boss.client(hostname, server.hosts[hostname]["user"])
-        except Exception, e:
-            bosslog.error("""There was an error connecting to host "{0}": {1}""".format(hostname, e))
-        else:
-            # Pass through the basedir, environment, project and context to the client object
-            remotehost.environment = environment
-            remotehost.project = project
-            remotehost.context = context
-            remotehost.varmap = server.varmap
-
-            # Send the main configuration templates, config values and pkg/ data
-            try:
-                remotehost.configure(server.hosts[hostname]["path"])
-            except Exception, e:
-                raise Exception("There was a problem configuring the remote client, {0}: {1}".format(hostname, e))
-
-            # Run the common scripts
-            remotehost.deploy(server.common_scriptdir)
-
-            # Run the project specific scripts
-            remotehost.deploy()
-
-            del remotehost
 
 if __name__ == "__main__":
     # Send INFO logging to stdout
@@ -90,8 +56,13 @@ if __name__ == "__main__":
     # Add the local lib/ directory to the Python path
     sys.path.append(os.path.join(__install__, "lib"))
 
+    import Boss
+
     # GO!
     try:
-        deploy(options.project, options.environment, options.context)
+        system = Boss.server(options.project, options.environment, options.context)
+        system.deploy()
     except Exception, e:
         bosslog.error("There was an error: {0}".format(e))
+        if bosslog.getEffectiveLevel() == logging.DEBUG:
+            traceback.print_exc(file=sys.stdout)

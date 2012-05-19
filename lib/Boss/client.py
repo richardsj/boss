@@ -2,12 +2,8 @@ import os
 import sys
 import random
 import string
-import logging
 import paramiko
 import Boss
-
-# Use the main BOSS logger
-bosslog = logging.getLogger("boss.logger")
 
 class IgnoreMissingKeys(paramiko.MissingHostKeyPolicy):
     """Class to set up a policy to ignote missing SSH host keys."""
@@ -44,7 +40,7 @@ class client():
         self.mkdirs(self.remote_basedir)
 
         # Output hostname
-        bosslog.info(hostname)
+        Boss.bosslog.info(hostname)
 
     def buildVarlist(self):
         """Class method to put a simple string that sets all the environment varibles needed for the remote scripts."""
@@ -118,7 +114,7 @@ class client():
 
         # Warn if there's no scripts to run
         if not os.path.exists(scriptdir):
-            bosslog.warn("""The "{0}" script directory does not exist.""".format(scriptdir))
+            Boss.bosslog.warn("""The "{0}" script directory does not exist.""".format(scriptdir))
             return False
 
         # Build the remote path and sure it exists on the remote host
@@ -132,7 +128,7 @@ class client():
         sftp = self.client.open_sftp()
 
         # Output the directory name
-        bosslog.info("| {0}".format(os.path.basename(remotedir)))
+        Boss.bosslog.info("| {0}".format(os.path.basename(remotedir)))
         for dirname, dirs, files in os.walk(scriptdir):
             files.sort()
             for file in files:
@@ -146,7 +142,7 @@ class client():
                     sftp.put(local_file, remote_file)
                 else:
                     # Warn about a non-executable script
-                    bosslog.warn("""| {0}: not executable.  Skipping.""".format(file))
+                    Boss.bosslog.warn("""| {0}: not executable.  Skipping.""".format(file))
                     continue
 
                 # Get the file permissions from the local file and apply them remotely
@@ -154,12 +150,12 @@ class client():
                 sftp.chmod(remote_file, lstat.st_mode)
 
                 # Execute the remote script
-                bosslog.info("| | {0}".format(os.path.basename(remote_file)))
+                Boss.bosslog.info("| | {0}".format(os.path.basename(remote_file)))
                 stdin, stdout, stderr = self.client.exec_command("{0} {1}".format(envlist, remote_file))
                 for line in stdout:
-                    bosslog.info("| | | {0}".format(line.rstrip()))
+                    Boss.bosslog.info("| | | {0}".format(line.rstrip()))
                 for line in stderr:
-                    bosslog.warn("| | | {0}".format(line.rstrip()))
+                    Boss.bosslog.warn("| | | {0}".format(line.rstrip()))
 
         self.rmdirs(remotedir)
         sftp.close()
@@ -185,7 +181,7 @@ class client():
         sftp.close()
 
         # Run the detokeniser
-        bosslog.info("| Detokenising the configuration templates")
+        Boss.bosslog.info("| Detokenising the configuration templates")
         self.mkdirs(root)
         channel = self.client.get_transport().open_session()
 
@@ -207,7 +203,7 @@ class client():
             output.append(channel.recv_stderr(8192))
         output = "".join(output).split("\n")
         for line in output:
-            bosslog.error("| | {0}".format(line.rstrip()))
+            Boss.bosslog.error("| | {0}".format(line.rstrip()))
 
         channel.close()
 

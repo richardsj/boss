@@ -7,7 +7,7 @@ import Boss
 
 class server():
     """
-    Class for the main BOSS server.
+    Class for the main BOSS system.
     """
 
     hosts = {}
@@ -36,6 +36,10 @@ class server():
 
         # Loop through each of the configured hosts
         hosts = self.resolve_option(self.context)
+
+        if not hosts:
+            raise Exception("There was a problem finding hosts for context ({0})".format(self.context))
+
         for hostname in hosts.split(","):
             self.hosts[hostname] = {}
             self.hosts[hostname]["user"] = self.resolve_option("ssh user", default=os.getlogin())
@@ -68,3 +72,31 @@ class server():
                 except (ConfigParser.NoOptionError, ConfigParser.NoSectionError), e:
                     # Fallback to the default
                     return default
+
+    def deploy(self):
+        for hostname in self.hosts:
+            # Transfer and run the scripts
+            try:
+                remotehost = Boss.client(hostname, server.hosts[hostname]["user"])
+            except Exception, e:
+                raise Exception("""There was an error connecting to host "{0}": {1}""".format(hostname, e))
+            else:
+                # Pass through the basedir, environment, project and context to the client object
+                remotehost.environment = self.environment
+                remotehost.project = self.project
+                remotehost.context = self.context
+                remotehost.varmap = self.varmap
+
+                # Send the main configuration templates, config values and pkg/ data
+                try:
+                    remotehost.configure(self.hosts[hostname]["path"])
+                except Exception, e:
+                    raise Exception("There was a problem configuring the remote client, {0}: {1}".format(hostname, e))
+
+                # Run the common scripts
+                remotehost.deploy(self.common_scriptdir)
+
+                # Run the project specific scripts
+                remotehost.deploy()
+
+                del remotehost
