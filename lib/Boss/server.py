@@ -26,7 +26,7 @@ class server():
         # Fetch the default user, if set
         try:
             default_user = bossconf.get("BOSS", "default user")
-        except:
+        except ConfigParser.NoOptionError, e:
             default_user = os.getlogin()
 
         # Read and parse the main environment config file
@@ -35,7 +35,10 @@ class server():
         envconf.read(env_file)
 
         # Get a list of the hosts to deploy to
-        hosts = envconf.get(project, context)
+        try:
+            hosts = envconf.get(project, context)
+        except ConfigParser.NoOptionError, e:
+            raise Exception("There appears to be no such context ({0}) for the environment ({1})".format(context, environment))
 
         # Resolve the common-scripts directory
         self.common_scriptdir = os.path.join(Boss.__install__, "common", "scripts")
@@ -49,13 +52,9 @@ class server():
                 hostname = item[1].strip()
                 user = item[0].strip()
 
-                # Determine if there is a deployment root set
-                item = hostname.split(":")
                 try:
-                    # Now split on the ':' symbol
-                    deploypath = item[1].strip()
-                    hostname = item[0].strip()
-                except IndexError:
+                    deploypath = bossconf.get("BOSS", "default deploy path")
+                except ConfigParser.NoOptionError, e:
                     deploypath = None
             except IndexError:
                 # '@' symbol missing.  Assume just a hostname.
