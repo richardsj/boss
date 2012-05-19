@@ -34,23 +34,22 @@ class server():
         # Resolve the common-scripts directory
         self.common_scriptdir = os.path.join(Boss.__install__, "common", "scripts")
 
-        # Loop through each of the configured hosts
-        hosts = self.resolve_option(self.context)
+        # Resolve the username and deployment path
+        self.user = self.resolve_option("ssh user", default=os.getlogin())
+        self.path = self.resolve_option("deploy path")
 
-        if not hosts:
-            raise Exception("There was a problem finding hosts for context ({0})".format(self.context))
+        # Determine the list of hosts
+        try:
+            self.hosts = self.resolve_option(self.context).split(",")
+        except Exception, e:
+            raise Exception("""Could not determine the list of hosts for context "{0}": {1}""".format(self.context, e))
 
-        for hostname in hosts.split(","):
-            self.hosts[hostname] = {}
-            self.hosts[hostname]["user"] = self.resolve_option("ssh user", default=os.getlogin())
-            self.hosts[hostname]["path"] = self.resolve_option("deploy path")
-
-            # Perform the environment variable mappings, if any
-            try:
-                for var, value in self.bossconf.items("VAR MAPPING"):
-                    self.varmap[var] = value
-            except ConfigParser.NoSectionError:
-                pass
+        # Perform the environment variable mappings, if any
+        try:
+            for var, value in self.bossconf.items("VAR MAPPING"):
+                self.varmap[var] = value
+        except ConfigParser.NoSectionError:
+            pass
 
     def resolve_option(self, option, default=None):
         """
@@ -74,10 +73,16 @@ class server():
                     return default
 
     def deploy(self):
+        """
+        Method to perform the main deployment run.
+        """
+
+        # Loop through the hostnames for this project, environment and context.
         for hostname in self.hosts:
             # Transfer and run the scripts
             try:
-                remotehost = Boss.client(hostname, server.hosts[hostname]["user"])
+                # Connect to the remote host
+                remotehost = Boss.client(hostname, self.user)
             except Exception, e:
                 raise Exception("""There was an error connecting to host "{0}": {1}""".format(hostname, e))
             else:
@@ -89,7 +94,7 @@ class server():
 
                 # Send the main configuration templates, config values and pkg/ data
                 try:
-                    remotehost.configure(self.hosts[hostname]["path"])
+                    remotehost.configure(self.path)
                 except Exception, e:
                     raise Exception("There was a problem configuring the remote client, {0}: {1}".format(hostname, e))
 
