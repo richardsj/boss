@@ -5,7 +5,8 @@ import sys
 import os
 import logging
 import optparse
-import ConfigParser
+
+__install__ = os.path.realpath(os.path.join(sys.path[0], ".."))
 
 class SingleLevelFilter(logging.Filter):
     """Class to filter out a single log level.  From, http://stackoverflow.com/questions/1383254/logging-streamhandler-and-standard-streams"""
@@ -22,95 +23,36 @@ class SingleLevelFilter(logging.Filter):
 def deploy(project, environment, context):
     """Main deployment loop."""
 
-    # Resolve the path of where BOSS is installed
-    boss_basedir = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ".."))
-
-    # Add the local lib/ directory to the Python path
-    sys.path.append(os.path.join(boss_basedir, "lib"))
-    sys.path.append(os.path.join(boss_basedir, "lib", "paramiko"))
-
     # Add the main boss class
     import Boss
 
-    # Main config directory
-    configdir = os.path.join(boss_basedir, "conf")
+    server = Boss.server(project, environment, context)
 
-    # Read and parse the main BOSS config file
-    configfile = os.path.join(configdir, "boss.conf")
-    bossconf = ConfigParser.ConfigParser()
-    bossconf.read(configfile)
-
-    # Fetch the default user, if set
-    try:
-        default_user = bossconf.get("BOSS", "default user")
-    except:
-        default_user = os.getlogin()
-
-    # Read and parse the main environment config file
-    env_file = os.path.join(configdir, "{0}.conf".format(environment))
-    envconf = ConfigParser.ConfigParser()
-    envconf.read(env_file)
-
-    # Get a list of the hosts to deploy to
-    hosts = envconf.get(project, context)
-
-    # Resolve the common-scripts directory
-    common_scriptdir = os.path.join(boss_basedir, "common", "scripts")
-
-    # Loop through each of the configured hosts
-    for entry in hosts.split(","):
-        # Try to work out the username and host for each entry
-        item = entry.split("@")
-        try:
-            # Simply split on the '@' symbol
-            host = item[1].strip()
-            user = item[0].strip()
-
-            # Determine if there is a deployment root set
-            item = host.split(":")
-            try:
-                # Now split on the ':' symbol
-                deploypath = item[1].strip()
-                host = item[0].strip()
-            except IndexError:
-                deploypath = None
-        except IndexError:
-            # '@' symbol missing.  Assume just a hostname.
-            host = item[0].strip()
-            # Set the user to the default user, if available
-            user = default_user
-
+    for hostname in server.hosts:
         # Transfer and run the scripts
         try:
-            remotehost = Boss.client(host, user)
+            remotehost = Boss.client(hostname, server.hosts[hostname]["user"])
         except Exception, e:
-            bosslog.error("""There was an error connecting to host "{0}": {1}""".format(host, e))
+            bosslog.error("""There was an error connecting to host "{0}": {1}""".format(hostname, e))
         else:
             # Pass through the basedir, environment, project and context to the client object
             remotehost.environment = environment
             remotehost.project = project
             remotehost.context = context
-
-            # Perform the environment variable mappings, if any
-            remotehost.varmap = {}
-            try:
-                for var, value in bossconf.items("VAR_MAPPING"):
-                    remotehost.varmap[var] = value
-            except ConfigParser.NoSectionError:
-                pass
+            remotehost.varmap = server.varmap
 
             # Send the main configuration templates, config values and pkg/ data
             try:
-                remotehost.configure(deploypath)
+                remotehost.configure(server.hosts[hostname]["path"])
             except Exception, e:
-                raise Exception("There was a problem configuring the remote client, {0}: {1}".format(host, e))
+                raise Exception("There was a problem configuring the remote client, {0}: {1}".format(hostname, e))
 
             # Run the common scripts
-            remotehost.deploy(common_scriptdir)
+            remotehost.deploy(server.common_scriptdir)
 
             # Run the project specific scripts
             remotehost.deploy()
-        finally:
+
             del remotehost
 
 if __name__ == "__main__":
@@ -144,6 +86,9 @@ if __name__ == "__main__":
     if (not options.project or not options.environment or not options.context):
         bosslog.error(parser.print_help())
         sys.exit(1)
+
+    # Add the local lib/ directory to the Python path
+    sys.path.append(os.path.join(__install__, "lib"))
 
     # GO!
     try:

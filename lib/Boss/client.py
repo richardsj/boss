@@ -4,6 +4,7 @@ import random
 import string
 import logging
 import paramiko
+import Boss
 
 # Use the main BOSS logger
 bosslog = logging.getLogger("boss.logger")
@@ -14,7 +15,7 @@ class IgnoreMissingKeys(paramiko.MissingHostKeyPolicy):
     def missing_host_key(self, client, hostname, key):
         """Class method to handle missing host keys."""
 
-        # Do nothing.
+        # Do nothing; i.e. ignore.
         return
 
 class client():
@@ -24,9 +25,6 @@ class client():
     deployroot = "/"
 
     def __init__(self, hostname, username):
-        # Detect the main BOSS base directory
-        self.boss_basedir = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ".."))
-
         # Set up an SSH client and set the key policy to ignore missing keys
         self.client = paramiko.SSHClient()
         self.client.load_system_host_keys()
@@ -116,7 +114,7 @@ class client():
 
         # Default to the supplied project for the script directory
         if not scriptdir:
-            scriptdir = os.path.join(self.boss_basedir, "projects", self.project, "scripts")
+            scriptdir = os.path.join(Boss.__install__, "projects", self.project, "scripts")
 
         # Warn if there's no scripts to run
         if not os.path.exists(scriptdir):
@@ -176,13 +174,13 @@ class client():
         # Create a directory to perform the configuration detokenisation
         configroot = os.path.join(self.remote_basedir, ".configure")
 
-        self.pushDirectory(os.path.join(self.boss_basedir, "projects", self.project, "templates"), os.path.join(configroot, "templates"))
-        self.pushDirectory(os.path.join(self.boss_basedir, "projects", self.project, "conf"), os.path.join(configroot, "conf"))
-        self.pushDirectory(os.path.join(self.boss_basedir, "projects", self.project, "pkg"), os.path.join(root))
+        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "templates"), os.path.join(configroot, "templates"))
+        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "conf"), os.path.join(configroot, "conf"))
+        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "pkg"), os.path.join(root))
 
         # Copy over the lib/detoken.py script and set the permissions
         sftp = self.client.open_sftp()
-        sftp.put(os.path.join(self.boss_basedir, "bin", "detoken.py"), os.path.join(configroot, "detoken.py"))
+        sftp.put(os.path.join(Boss.__install__, "bin", "detoken.py"), os.path.join(configroot, "detoken.py"))
         sftp.chmod(os.path.join(configroot, "detoken.py"), 0755)
         sftp.close()
 
