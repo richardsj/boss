@@ -19,20 +19,25 @@ class server():
         configdir = os.path.join(Boss.__install__, "conf")
 
         # Read and parse the main BOSS config file
-        configfile = os.path.join(configdir, "boss.conf")
+        conf_file = os.path.join(configdir, "boss.conf")
         bossconf = ConfigParser.ConfigParser()
-        bossconf.read(configfile)
-
-        # Fetch the default user, if set
-        try:
-            default_user = bossconf.get("BOSS", "default user")
-        except ConfigParser.NoOptionError, e:
-            default_user = os.getlogin()
+        bossconf.read(conf_file)
 
         # Read and parse the main environment config file
         env_file = os.path.join(configdir, "{0}.conf".format(environment))
         envconf = ConfigParser.ConfigParser()
         envconf.read(env_file)
+
+        # Read and parse the per-project config file
+        proj_file = os.path.join(Boss.__install__, "projects", project, "project.conf")
+        projconf = ConfigParser.ConfigParser()
+        projconf.read(proj_file)
+
+        # Fetch the default user, if set
+        try:
+            default_user = bossconf.get("BOSS", "default user")
+        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError), e:
+            default_user = os.getlogin()
 
         # Get a list of the hosts to deploy to
         try:
@@ -52,10 +57,14 @@ class server():
                 hostname = item[1].strip()
                 user = item[0].strip()
 
+                # Resolve the deployment path
                 try:
-                    deploypath = bossconf.get("BOSS", "default deploy path")
-                except ConfigParser.NoOptionError, e:
-                    deploypath = None
+                    deploypath = projconf.get("PROJECT", "deploy path")
+                except (ConfigParser.NoOptionError, ConfigParser.NoSectionError), e:
+                    try:
+                        deploypath = bossconf.get("BOSS", "default deploy path")
+                    except (ConfigParser.NoOptionError, ConfigParser.NoSectionError), e:
+                        deploypath = None
             except IndexError:
                 # '@' symbol missing.  Assume just a hostname.
                 hostname = item[0].strip()
