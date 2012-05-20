@@ -10,12 +10,18 @@ import traceback
 __install__ = os.path.realpath(os.path.join(sys.path[0], ".."))
 
 class SingleLevelFilter(logging.Filter):
-    """Class to filter out a single log level.  From, http://stackoverflow.com/questions/1383254/logging-streamhandler-and-standard-streams"""
+    """
+    Class to filter out a single log level.  From, http://stackoverflow.com/questions/1383254/logging-streamhandler-and-standard-streams.
+    """
+
     def __init__(self, passlevel, reject):
         self.passlevel = passlevel
         self.reject = reject
 
     def filter(self, record):
+        """
+        Class method to filter out the required logging level entries.
+        """
         if self.reject:
             return (record.levelno != self.passlevel)
         else:
@@ -65,4 +71,5 @@ if __name__ == "__main__":
     except Exception, e:
         bosslog.error("There was an error: {0}".format(e))
         if bosslog.getEffectiveLevel() == logging.DEBUG:
+            # Print a traceback to help work out any issues
             traceback.print_exc(file=sys.stdout)
