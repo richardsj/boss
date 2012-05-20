@@ -6,16 +6,22 @@ import paramiko
 import Boss
 
 class IgnoreMissingKeys(paramiko.MissingHostKeyPolicy):
-    """Class to set up a policy to ignote missing SSH host keys."""
+    """
+    Class to set up a policy to ignote missing SSH host keys.
+    """
 
     def missing_host_key(self, client, hostname, key):
-        """Class method to handle missing host keys."""
+        """
+        Class method to handle missing host keys.
+        """
 
         # Do nothing; i.e. ignore.
         return
 
 class client():
-    """Class for a remote BOSS client."""
+    """
+    Class for a remote BOSS client.
+    """
 
     tmpdir = "/tmp"
     deployroot = "/"
@@ -44,7 +50,9 @@ class client():
         self.mkdirs(self.remote_basedir)
 
     def buildVarlist(self):
-        """Class method to put a simple string that sets all the environment varibles needed for the remote scripts."""
+        """
+        Class method to put a simple string that sets all the environment varibles needed for the remote scripts.
+        """
         varlist = {}
 
         # Set the main BOSS variables
@@ -67,19 +75,23 @@ class client():
         return envlist
 
     def mkdirs(self, directory):
-        """Class method to recursively make directories on a remote client."""
+        """
+        Class method to recursively make directories on a remote client.
+        """
 
-        (stdin, stdout, stderr) = self.client.exec_command("mkdir -p {0}".format(directory))
-        # Read the stderr to ensure we let the mkdir command complete.  [ISSUE-5]
-        stderr.read()
+        self.execute("mkdir -p {0}".format(directory))
 
     def rmdirs(self, directory):
-        """Class method to recursively delete directories on a remote client."""
+        """
+        Class method to recursively delete directories on a remote client.
+        """
 
-        self.client.exec_command("rm -rf {0}".format(directory))
+        self.execute("rm -rf {0}".format(directory))
 
     def pushDirectory(self, src_dir, dst_dir):
-        """Class method to copy the contents of a directory to a remote host."""
+        """
+        Class method to copy the contents of a directory to a remote host.
+        """
 
         self.mkdirs(dst_dir)
 
@@ -107,7 +119,9 @@ class client():
         sftp.close()
 
     def deploy(self, scriptdir=None):
-        """Class method to copy a local directory to a remote host and executes the scripts within."""
+        """
+        Class method to copy a local directory to a remote host and executes the scripts within.
+        """
 
         # Default to the supplied project for the script directory
         if not scriptdir:
@@ -152,17 +166,17 @@ class client():
 
                 # Execute the remote script
                 Boss.bosslog.info("| | {0}".format(os.path.basename(remote_file)))
-                stdin, stdout, stderr = self.client.exec_command("{0} {1}".format(envlist, remote_file))
-                for line in stdout:
-                    Boss.bosslog.info("| | | {0}".format(line.rstrip()))
-                for line in stderr:
-                    Boss.bosslog.warn("| | | {0}".format(line.rstrip()))
+                (errorcode, output) = self.execute("{0} {1}".format(envlist, remote_file))
+                for line in output:
+                    Boss.bosslog.info("| | | {0}".format(line))
 
         self.rmdirs(remotedir)
         sftp.close()
 
     def configure(self, root=None):
-        """Class method to copy over the configuration templates and values and peform detokenisation."""
+        """
+        Class method to copy over the configuration templates and values and peform detokenisation.
+        """
 
         # Override the default deployment root if provided
         if root is not None:
@@ -176,6 +190,10 @@ class client():
         self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "pkg"), os.path.join(self.deployroot))
 
     def detoken(self):
+        """
+        Class method to copy over the detokeniser and run it against any deployed configuration.
+        """
+
         # Copy over the lib/detoken.py script and set the permissions
         sftp = self.client.open_sftp()
         sftp.put(os.path.join(Boss.__install__, "bin", "detoken.py"), os.path.join(self.configroot, "detoken.py"))
@@ -185,32 +203,45 @@ class client():
         # Run the detokeniser
         Boss.bosslog.info("| Detokenising the configuration templates")
         self.mkdirs(self.deployroot)
+
+        (errorcode, output) = self.execute("{0} -c {1} -t {2} -d {3}".format(os.path.join(self.configroot, "detoken.py"),
+                                           os.path.join(self.configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
+                                           os.path.join(self.configroot, "templates"),
+                                           self.deployroot
+                                          ))
+
+        for line in output:
+            Boss.bosslog.error("| | {0}".format(line))
+
+        if errorcode > 0:
+            raise Exception("The detokenisation process failed.")
+
+    def execute(self, command):
+        """
+        Class method to execute a command remotely.
+
+        Returns: A tuple (errorcode, output)
+        """
+
         channel = self.client.get_transport().open_session()
 
         # Combine the output for stdout and stderr
         channel.set_combine_stderr(True)
 
-        channel.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(self.configroot, "detoken.py"),
-                             os.path.join(self.configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
-                             os.path.join(self.configroot, "templates"),
-                             self.deployroot
-                            ))
+        # Run the command
+        channel.exec_command(command)
 
         # Wait for the command to finish and get the returncode
         errorcode = channel.recv_exit_status()
 
+        # Build output
         output = []
-        # Display stderr
-        while channel.recv_stderr_ready():
-            output.append(channel.recv_stderr(8192))
-        output = "".join(output).split("\n")
-        for line in output:
-            Boss.bosslog.error("| | {0}".format(line.rstrip()))
+        while channel.recv_ready():
+            output.append(channel.recv(8192))
 
         channel.close()
 
-        if errorcode > 0:
-            raise Exception("The detokenisation process failed.")
+        return (errorcode, "".join(output).split("\n"))
 
     def __str__(self):
         width = 40
