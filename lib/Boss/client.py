@@ -27,6 +27,10 @@ class client():
         missingKeyPolicy = IgnoreMissingKeys()
         self.client.set_missing_host_key_policy(missingKeyPolicy)
 
+        # Set some object attributes
+        self.hostname = hostname
+        self.username = username
+
         # Connect to the remote host
         try:
             self.client.connect(hostname, username=username)
@@ -38,9 +42,6 @@ class client():
 
         self.remote_basedir = os.path.join(self.tmpdir, "BOSS-{0}".format(rndstring))
         self.mkdirs(self.remote_basedir)
-
-        # Output hostname
-        Boss.bosslog.info(hostname)
 
     def buildVarlist(self):
         """Class method to put a simple string that sets all the environment varibles needed for the remote scripts."""
@@ -163,35 +164,36 @@ class client():
     def configure(self, root=None):
         """Class method to copy over the configuration templates and values and peform detokenisation."""
 
-        # Use the default config destination if none is provided
-        if root is None:
-            root = self.deployroot
+        # Override the default deployment root if provided
+        if root is not None:
+            self.deployroot = root
 
         # Create a directory to perform the configuration detokenisation
-        configroot = os.path.join(self.remote_basedir, ".configure")
+        self.configroot = os.path.join(self.remote_basedir, ".configure")
 
-        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "templates"), os.path.join(configroot, "templates"))
-        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "conf"), os.path.join(configroot, "conf"))
-        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "pkg"), os.path.join(root))
+        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "templates"), os.path.join(self.configroot, "templates"))
+        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "conf"), os.path.join(self.configroot, "conf"))
+        self.pushDirectory(os.path.join(Boss.__install__, "projects", self.project, "pkg"), os.path.join(self.deployroot))
 
+    def detoken(self):
         # Copy over the lib/detoken.py script and set the permissions
         sftp = self.client.open_sftp()
-        sftp.put(os.path.join(Boss.__install__, "bin", "detoken.py"), os.path.join(configroot, "detoken.py"))
-        sftp.chmod(os.path.join(configroot, "detoken.py"), 0755)
+        sftp.put(os.path.join(Boss.__install__, "bin", "detoken.py"), os.path.join(self.configroot, "detoken.py"))
+        sftp.chmod(os.path.join(self.configroot, "detoken.py"), 0755)
         sftp.close()
 
         # Run the detokeniser
         Boss.bosslog.info("| Detokenising the configuration templates")
-        self.mkdirs(root)
+        self.mkdirs(self.deployroot)
         channel = self.client.get_transport().open_session()
 
         # Combine the output for stdout and stderr
         channel.set_combine_stderr(True)
 
-        channel.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(configroot, "detoken.py"),
-                             os.path.join(configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
-                             os.path.join(configroot, "templates"),
-                             root
+        channel.exec_command("{0} -c {1} -t {2} -d {3}".format(os.path.join(self.configroot, "detoken.py"),
+                             os.path.join(self.configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
+                             os.path.join(self.configroot, "templates"),
+                             self.deployroot
                             ))
 
         # Wait for the command to finish and get the returncode
@@ -209,6 +211,16 @@ class client():
 
         if errorcode > 0:
             raise Exception("The detokenisation process failed.")
+
+    def __str__(self):
+        width = 40
+        string =  "+" + "-" * (width + 2) + "+\n"
+        string += "| " + "Hostname: {0}".format(self.hostname).ljust(width) + " |\n"
+        string += "| " + "Username: {0}".format(self.username).ljust(width) + " |\n"
+        string += "| " + "Deployment root: {0}".format(self.deployroot).ljust(width) + " |\n"
+        string += "+" + "-" * (width + 2) + "+"
+
+        return string
 
     def __del__(self):
         # Attempt to tidy-up the temporary directory on the remote host

@@ -40,7 +40,8 @@ class server():
 
         # Determine the list of hosts
         try:
-            self.hosts = self.resolve_option(self.context).split(",")
+            # Split the string by commas, and run through str.strip()
+            self.hosts = [host.strip() for host in self.resolve_option(self.context).split(",")]
         except Exception, e:
             raise Exception("""Could not determine the list of hosts for context "{0}": {1}""".format(self.context, e))
 
@@ -97,6 +98,11 @@ class server():
                     remotehost.configure(self.path)
                 except Exception, e:
                     raise Exception("There was a problem configuring the remote client, {0}: {1}".format(hostname, e))
+
+                Boss.bosslog.info(remotehost)
+
+                # Run the detokenisation process
+                remotehost.detoken()
 
                 # Run the common scripts
                 remotehost.deploy(self.common_scriptdir)
