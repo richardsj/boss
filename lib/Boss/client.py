@@ -211,7 +211,7 @@ class client():
                                           ))
 
         for line in output:
-            Boss.bosslog.error("| | {0}".format(line))
+            Boss.bosslog.info("| | {0}".format(line))
 
         if errorcode > 0:
             raise Exception("The detokenisation process failed.")
