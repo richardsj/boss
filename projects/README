@@ -6,18 +6,21 @@ STRUCTURE
 ---------
 projects/
 |-- project1/
-|   |-- script1
-|   `-- script2
+|   `-- scripts
+|       |-- script1
+|       `-- script2
 |-- project2/
-|   |-- script1
-|   |-- script2
+|   `-- scripts
+|       |-- script1
+|       `-- script2
 |-- project3/
     .
     .
     .
 `-- project-n/
-    |-- script1
+    `-- scripts
+        |-- script1
         .
         .
         .
-    `-- script-n
+        `-- script-n

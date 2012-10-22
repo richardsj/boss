@@ -36,7 +36,7 @@ if __name__ == "__main__":
       -p PROJECT, --project=PROJECT
                             The project scripts to execute.
       -e ENVIRONMENT, --env=ENVIRONMENT
-                            The environment to delploy to.
+                            The environment to deploy to.
       -c CONTEXT, --context=CONTEXT
                             The context of the project.
     """
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     # Get the command line options
     parser = optparse.OptionParser()
     parser.add_option("-p", "--project", dest="project", help="The project scripts to execute.")
-    parser.add_option("-e", "--env", dest="environment", help="The environment to delploy to.")
+    parser.add_option("-e", "--env", dest="environment", help="The environment to deploy to.")
     parser.add_option("-c", "--context", dest="context", help="The context of the project.")
     parser.add_option("-l", "--loglevel", dest="loglevel", help="The loglevel of the project.  e.g. DEBUG, INFO, WARN, ERROR")
     (options, args) = parser.parse_args()
