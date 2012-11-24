@@ -79,14 +79,14 @@ class client():
         Class method to recursively make directories on a remote client.
         """
 
-        self.execute("mkdir -p {0}".format(directory))
+        for line in self.execute("mkdir -p {0}".format(directory)): pass
 
     def rmdirs(self, directory):
         """
         Class method to recursively delete directories on a remote client.
         """
 
-        self.execute("rm -rf {0}".format(directory))
+        for line in self.execute("rm -rf {0}".format(directory)): pass
 
     def pushDirectory(self, src_dir, dst_dir):
         """
@@ -112,7 +112,7 @@ class client():
                 try:
                     sftp.put(local_file, remote_file)
                 except Exception, e:
-                    raise Exception("File copy failed: {0}".format(e))
+                    raise Exception("File copy failed: {0}: {1}".format(remote_file, e))
 
                 sftp.chmod(remote_file, os.stat(local_file).st_mode)
 
@@ -166,8 +166,7 @@ class client():
 
                 # Execute the remote script
                 Boss.bosslog.info("| | {0}".format(os.path.basename(remote_file)))
-                (errorcode, output) = self.execute("{0} {1}".format(envlist, remote_file))
-                for line in output:
+                for line in self.execute("{0} {1}".format(envlist, remote_file)):
                     Boss.bosslog.info("| | | {0}".format(line))
 
         self.rmdirs(remotedir)
@@ -204,17 +203,12 @@ class client():
         Boss.bosslog.info("| Detokenising the configuration templates")
         self.mkdirs(self.deployroot)
 
-        (errorcode, output) = self.execute("{0} -c {1} -t {2} -d {3}".format(os.path.join(self.configroot, "detoken.py"),
-                                           os.path.join(self.configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
-                                           os.path.join(self.configroot, "templates"),
-                                           self.deployroot
-                                          ))
-
-        for line in output:
+        for line in self.execute("{0} -c {1} -t {2} -d {3}".format(os.path.join(self.configroot, "detoken.py"),
+                                  os.path.join(self.configroot, "conf", "{0}-{1}.properties".format(self.context, self.environment)),
+                                  os.path.join(self.configroot, "templates"),
+                                  self.deployroot
+                                 )):
             Boss.bosslog.info("| | {0}".format(line))
-
-        if errorcode > 0:
-            raise Exception("The detokenisation process failed.")
 
     def execute(self, command):
         """
@@ -231,17 +225,16 @@ class client():
         # Run the command
         channel.exec_command(command)
 
-        # Wait for the command to finish and get the returncode
-        errorcode = channel.recv_exit_status()
-
         # Build output
-        output = []
-        while channel.recv_ready():
-            output.append(channel.recv(8192))
+        while not channel.exit_status_ready():
+            if channel.recv_ready():
+                for line in channel.recv(8192).strip().split("\n"):
+                    yield line
+
+        # Wait for the command to finish
+        channel.recv_exit_status()
 
         channel.close()
-
-        return (errorcode, "".join(output).split("\n"))
 
     def __str__(self):
         width = 40
